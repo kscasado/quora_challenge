@@ -9,11 +9,15 @@ March 14th, 2017
 
 In machine learning there are many buzzwords being thrown around lately. One of the big ones is deep learning. This is because "deep learning" has pushed state of the art in many fields such as computer vision and natural language processing. A large part of work that I have done at school as well as what mostly seems to be covered when trying to see what machine learning can do is computer vision. However natural language processing doesn't seem to get as much attention.
 
-There have been many advancements in natural language processing over the past year with the high rise of Recurrent Neural Networks the state of the art has really been pushed far over the past two years. NLP presents different problems as the data is represented sparsely and not nearly as dense as when looking at computer vision or audio.
+There have been many advancements in natural language processing over the past year with the high rise of Recurrent Neural Networks(https://en.wikipedia.org/wiki/Recurrent_neural_network) the state of the art has really been pushed far over the past two years. NLP presents different problems as the data is represented sparsely and not nearly as dense as when looking at computer vision or audio. With the rise specifically of Long short term memory networks (https://arxiv.org/pdf/1701.03441.pdf) people have found success in applying this to semantic processing. (https://arxiv.org/pdf/1502.06922.pdf)
+
+
 
 ### Problem Statement
 
 With words being similar yet represented differently it is hard to tell when one question is the same as the other, there are many approaches like stemming/lemmatizing, removing stop words, part of speech tagging etc. But all of these turn out to not really come close to anything production worthy. Ideally if we could find a way to use machine learning (specifically deep learning) to try and tell if two statements are the same this would be beneficial for so many question answer forums such as stackoverflow or quora as they could narrow down the repetitive nature of experts having to answer many of the same questions.
+
+The input the model will receive is two questions and the output will be a binary classification representing whether the two questions are asking the same thing.
 
 ### Datasets and Inputs
 
@@ -22,23 +26,19 @@ Quora recently released a dataset that gives question pairs and a label of wheth
 I will be doing preprocessing on the questions, first cleaning to make sure they are all valid strings and special characters are taken out, then I will try out different ways of cleaning up the questions such as removing stop words, lemmatization, and using n-gram phrases. This will depend on which approaches give me better results.
 
 ### Solution Statement
-_(approx. 1 paragraph)_
-Ideally the solution would be able to detect whether a question is considered a duplicate with another question. So if we give two inputs the machine learning model would be able to detect whether they are asking the same thing.
+Ideally the solution would be able to detect whether a question is considered a duplicate with another question. So if we give two inputs the machine learning model would be able to detect whether they are asking the same thing. As mentioned above since LSTM networks have shown to give good results on semantic analysis. I will also be using an approach known as word2vec or embedding (https://arxiv.org/pdf/1301.3781.pdf) this approach helps to deal with the sparsity of words and how it is very hard to represent the relation that words have. So I will be using a neural network where it first embeds the words using the google common crawl vectors (https://nlp.stanford.edu/projects/glove/) and then feed this to a LSTM layer and then I will try to use various ways of concatenating the representation for each question. I will explain below more in depth as to the various ways I will try to optimize this solution. 
 
 
 ### Benchmark Model
-_(approximately 1-2 paragraphs)_
 
 Since this is a binary classification the baseline prediction would be 50%. This is because for every chance there are two options. However the goal would be to match the results quora has posted. Quora does not show their existing results of using a random forest but they do share the best scores they get using the RNN approach. Currently the best they get is a f1 score of 88%(https://engineering.quora.com/Semantic-Question-Matching-with-Deep-Learning). This will be the benchmark result that I shoot for and try to improve upon.
 
 ### Evaluation Metrics
-_(approx. 1-2 paragraphs)_
 
 In this section, propose at least one evaluation metric that can be used to quantify the performance of both the benchmark model and the solution model. The evaluation metric(s) you propose should be appropriate given the context of the data, the problem statement, and the intended solution. Describe how the evaluation metric(s) are derived and provide an example of their mathematical representations (if applicable). Complex evaluation metrics should be clearly defined and quantifiable (can be expressed in mathematical or logical terms).
 The most common metric used for simple binary classification is f1 score which combines precision, and recall to consider the accuracy of the existing model. For a better explanation of f1 score it can be explained here: (https://en.wikipedia.org/wiki/F1_score) I will be using the base approach which is 2*((precision*recall)/(precision+recall))
 
 ### Project Design
-_(approx. 1 page)_
 
 In this final section, summarize a theoretical workflow for approaching a solution given the problem. Provide thorough discussion for what strategies you may consider employing, what analysis of the data might be required before being used, or which algorithms will be considered for your implementation. The workflow and discussion that you provide should align with the qualities of the previous sections. Additionally, you are encouraged to include small visualizations, pseudocode, or diagrams to aid in describing the project design, but it is not required. The discussion should clearly outline your intended workflow of the capstone project.
 
