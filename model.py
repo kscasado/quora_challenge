@@ -25,7 +25,7 @@ from keras.layers.wrappers import Bidirectional
 from keras.layers.convolutional import Conv1D
 from keras.layers.recurrent import GRU,LSTM
 from keras.layers.pooling import MaxPooling2D
-from keras.layers import Concatenate, Input, concatenate
+from keras.layers import Concatenate, Input, concatenate,dot
 from keras.layers.normalization import BatchNormalization
 from keras import initializers as initializations
 from keras import regularizers
@@ -133,136 +133,159 @@ class AttentionWithContext(Layer):
         """Shape transformation logic so Keras can infer output shape
         """
         return (input_shape[0], input_shape[-1])
+def cosine_distance(vests):
+    x, y = vests
+    x = K.l2_normalize(x, axis=-1)
+    y = K.l2_normalize(y, axis=-1)
+    return -K.mean(x * y, axis=-1, keepdims=True)
+def euclidean_distance(vects):
+    x, y = vects
+    return K.sqrt(K.sum(K.square(x - y), axis=1, keepdims=True))
+
+def eucl_dist_output_shape(shapes):
+    shape1, shape2 = shapes
+    return (shape1[0], 1)
+
+def contrastive_loss(y_true, y_pred):
+    '''Contrastive loss from Hadsell-et-al.'06
+    http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
+    '''
+    margin = 1
+    return K.mean(y_true * K.square(y_pred) + (1 - y_true) * K.square(K.maximum(margin - y_pred, 0)))
+
+def cos_dist_output_shape(shapes):
+    shape1, shape2 = shapes
+    return (shape1[0],1)
+def time_distr_embedd(model):
+    model.add(TimeDistributed(Dense(EMBEDDING_DIM, activation='relu')))
+    model.add(Lambda(lambda x: K.sum(x, axis=1), output_shape=(EMBEDDING_DIM,)))
+def embedd_layer(model):
+    model.add(Embedding(embedding_matrix.shape[0],
+            EMBEDDING_DIM,
+            weights=[embedding_matrix],
+            input_length=MAX_SEQUENCE_LENGTH,
+            trainable=False))
+def conv_layer(model,drop,dim,num_dense):
+    model.add(Convolution1D(filters=dim,
+                             kernel_size=filter_length,
+                             padding='valid',
+                             activation='relu',
+                             strides=1))
+    model.add(Dropout(drop))
+
+    model.add(Convolution1D(filters=dim,
+                             kernel_size=filter_length,
+                             padding='valid',
+                             activation='relu',
+                             strides=1))
+
+    model.add(GlobalMaxPooling1D())
+    model.add(Dropout(drop))
+    model.add(BatchNormalization())
+
+    model.add(Dense(num_dense))
+    model.add(Dropout(drop))
+    model.add(BatchNormalization())
+
+def dense_layer(model,num_dense,drop_dense):
+    model.add(Dense(num_dense))
+    model.add(PReLU())
+    model.add(Dropout(drop_dense))
+    model.add(BatchNormalization())
+def f1_score(y_true,y_pred):
+    y = K.eval(y_pred)
+    y = [1 if x >.5 else 0 for x in y]
+    return metrics.f1_score(y_true,y)
 
 embedding_matrix = pickle.load(open('data/embedd_matrix.p','rb'))
 x1 = pickle.load(open('data/q1_train.p','rb'))
 x2 = pickle.load(open('data/q2_train.p','rb'))
-y = pd.read_csv('data/train.csv')['is_duplicate']
+y = pd.read_csv('data/train.csv').is_duplicate
 word_index = embedding_matrix[0]-1
 max_features = 200000
 filter_length = 5
 nb_filter = 64
-pool_length = 4
 EMBEDDING_DIM = 300
 MAX_SEQUENCE_LENGTH = 30
-model = Sequential()
+num_lstm = np.random.randint(175, 275)
+num_dense = np.random.randint(100, 150)
+drop_lstm = 0.15 + np.random.rand() * 0.25
+drop_dense = 0.15 + np.random.rand() * 0.25
+STAMP = 'lstm_%d_%d_%.2f_%.2f'%(num_lstm, num_dense, drop_lstm, \
+        drop_dense)
 print('Build model...')
-embedding_layer = Embedding(embedding_matrix.shape[0],
-        300,
-        weights=[embedding_matrix],
-        input_length=MAX_SEQUENCE_LENGTH,
-        trainable=False)
-model1 = Sequential()
-model1.add(embedding_layer)
 
-model1.add(TimeDistributed(Dense(300, activation='relu')))
-model1.add(Lambda(lambda x: K.sum(x, axis=1), output_shape=(300,)))
+embedd_1 = Sequential(name="Embedd_1")
+embedd_layer(embedd_1)
+time_distr_embedd(embedd_1)
+embedd_2 = Sequential(name ="Embedd_2")
+embedd_layer(embedd_2)
+time_distr_embedd(embedd_2)
 
-model2 = Sequential()
-model2.add(embedding_layer)
+conv_1 = Sequential(name="Conv q_1")
+embedd_layer(conv_1)
+conv_layer(conv_1,drop_dense,nb_filter,num_dense)
+conv_2 = Sequential(name="Conv q_2")
+embedd_layer(conv_2)
+conv_layer(conv_2,drop_dense,nb_filter,num_dense)
 
-model2.add(TimeDistributed(Dense(300, activation='relu')))
-model2.add(Lambda(lambda x: K.sum(x, axis=1), output_shape=(300,)))
+lstm_1 = Sequential(name="LSTM q_1")
+embedd_layer(lstm_1)
+lstm_1.add(Bidirectional(LSTM(num_lstm, dropout=drop_lstm, recurrent_dropout=drop_lstm)))
 
-model3 = Sequential()
-model3.add(embedding_layer)
-model3.add(Convolution1D(nb_filter=nb_filter,
-                         filter_length=filter_length,
-                         border_mode='valid',
-                         activation='relu',
-                         subsample_length=1))
-model3.add(Dropout(0.2))
+lstm_2 = Sequential(name="LSTM q_2")
+embedd_layer(lstm_2)
+lstm_2.add(Bidirectional(LSTM(num_lstm, dropout=drop_lstm, recurrent_dropout=drop_lstm)))
 
-model3.add(Convolution1D(nb_filter=nb_filter,
-                         filter_length=filter_length,
-                         border_mode='valid',
-                         activation='relu',
-                         subsample_length=1))
+cos_dist_embedd = Sequential(name="cos_dist_embedd")
+cos_dist_embedd.add(Merge([embedd_1,embedd_2],mode='cos'))
+cos_dist_embedd.add(Flatten())
+cos_dist_lstm = Sequential(name="cos_dist_lstm")
+cos_dist_lstm.add(Merge([lstm_1,lstm_2],mode='cos'))
+cos_dist_lstm.add(Flatten())
+cos_dist_conv = Sequential(name="cos_dist_conv")
+cos_dist_conv.add(Merge([conv_1,conv_2],mode='cos'))
+cos_dist_conv.add(Flatten())
+eucl_dist_embedd = Sequential(name="eucl_dist_embedd")
+eucl_dist_embedd.add(Merge([embedd_1,embedd_2],mode=euclidean_distance,output_shape = eucl_dist_output_shape))
+eucl_dist_lstm = Sequential(name="eucl_dist_lstm")
+eucl_dist_lstm.add(Merge([lstm_1,lstm_2],mode=euclidean_distance,output_shape = eucl_dist_output_shape))
+eucl_dist_conv = Sequential(name="eucl_dist_conv")
+eucl_dist_conv.add(Merge([conv_1,conv_2],mode=euclidean_distance,output_shape = eucl_dist_output_shape))
 
-model3.add(GlobalMaxPooling1D())
-model3.add(Dropout(0.2))
-
-model3.add(Dense(300))
-model3.add(Dropout(0.2))
-model3.add(BatchNormalization())
-
-model4 = Sequential()
-model4.add(embedding_layer)
-model4.add(Convolution1D(nb_filter=nb_filter,
-                         filter_length=filter_length,
-                         border_mode='valid',
-                         activation='relu',
-                         subsample_length=1))
-model4.add(Dropout(0.2))
-
-model4.add(Convolution1D(nb_filter=nb_filter,
-                         filter_length=filter_length,
-                         border_mode='valid',
-                         activation='relu',
-                         subsample_length=1))
-
-model4.add(GlobalMaxPooling1D())
-model4.add(Dropout(0.2))
-
-model4.add(Dense(300))
-model4.add(Dropout(0.2))
-model4.add(BatchNormalization())
-model5 = Sequential()
-model5.add(embedding_layer)
-model5.add(Bidirectional(LSTM(300, dropout=0.2, recurrent_dropout=0.2,return_sequences=True)))
-model5.add(AttentionWithContext())
-model6 = Sequential()
-model6.add(embedding_layer)
-model6.add(Bidirectional(LSTM(300, dropout=0.2, recurrent_dropout=0.2,return_sequences=True)))
-model6.add(AttentionWithContext())
-merged_model = Sequential()
-merged_model.add(Merge([model1, model2, model3, model4, model5, model6],mode='concat'))
+merged_model = Sequential(name="concat model")
+merged_model.add(Merge([cos_dist_embedd, cos_dist_conv,cos_dist_lstm,
+                        eucl_dist_embedd, eucl_dist_conv,eucl_dist_lstm
+                        ], mode='concat'))
 merged_model.add(BatchNormalization())
+dense_layer(merged_model,num_dense,drop_dense)
+dense_layer(merged_model,num_dense/2,drop_dense)
+dense_layer(merged_model,num_dense/2,drop_dense)
+dense_layer(merged_model,num_dense/4,drop_dense)
+dense_layer(merged_model,num_dense/4,drop_dense)
 
-merged_model.add(Dense(300))
-merged_model.add(PReLU())
-merged_model.add(Dropout(0.2))
-merged_model.add(BatchNormalization())
-
-merged_model.add(Dense(300))
-merged_model.add(PReLU())
-merged_model.add(Dropout(0.2))
-merged_model.add(BatchNormalization())
-
-merged_model.add(Dense(300))
-merged_model.add(PReLU())
-merged_model.add(Dropout(0.2))
-merged_model.add(BatchNormalization())
-
-merged_model.add(Dense(300))
-merged_model.add(PReLU())
-merged_model.add(Dropout(0.2))
-merged_model.add(BatchNormalization())
-
-merged_model.add(Dense(300))
-merged_model.add(PReLU())
-merged_model.add(Dropout(0.2))
-merged_model.add(BatchNormalization())
 
 merged_model.add(Dense(1))
 merged_model.add(Activation('sigmoid'))
 
-merged_model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
-tbCallBack = keras.callbacks.TensorBoard(log_dir='./Graph_2_lstm_with_f1', histogram_freq=0, write_graph=True, write_images=True)
-early_stopping =EarlyStopping(monitor='val_loss', patience=4)
 
-checkpoint = ModelCheckpoint('weights.h5', monitor='val_acc', save_best_only=True, verbose=2)
-#x_train_1,x_test_1,x_train_2,x_test_2,y_train,y_test = train_test_split(x1,x2,y,test_size=.1,random_state=4)
-#merged_model.compile(loss='binary_crossentropy',optimizer='adam',metrics=['accuracy'])
-merged_model.fit([x1, x2, x1, x2, x1, x2], y=y, batch_size=384, nb_epoch=200,
-                 verbose=1, validation_split=0.1, shuffle=True, callbacks=[checkpoint])
-#merged_model.fit([x1,x2,x1,x2,x1,x2],y=y,
-         # batch_size=256,epochs=100,validation_split=.1,shuffle=True,callbacks=[tbCallBack,early_stopping])
-#tbCallBack = keras.callbacks.TensorBoard(log_dir='./Graph_2_lstm_with_f1', histogram_freq=0, write_graph=True, write_images=True)
-#early_stopping =EarlyStopping(monitor='val_loss', patience=4)
-#merged_model.fit([x1, x2, x1, x2, x1, x2], y=y, batch_size=384, epochs=200,
-#                 verbose=1, validation_split=0.1, shuffle=True, callbacks=[checkpoint,tbCallBack])
+x_train_1,x_test_1,x_train_2,x_test_2,y_train,y_test = train_test_split(x1,x2,y,test_size=.1,random_state=4)
+weight_val = np.ones(len(y_test))
+class_weight = {0: 1.309028344, 1: 0.472001959}
+weight_val *= 0.472001959
+weight_val[y_test==0] = 1.309028344
+early_stopping =EarlyStopping(monitor='val_loss', patience=5)
+merged_model.compile(loss='binary_crossentropy', optimizer='nadam', metrics=['accuracy'])
 
-
-#prediction = merged_model.predict([x_train_1,x_train_2,x_train_1,x_train_2,x_train_1,x_train_2])
-print('f1_score',metrics.f1_score(prediction.argmax(axis=1),y_test[:,1]))
+checkpoint = ModelCheckpoint(str(STAMP+'.h5'), monitor='val_loss', save_best_only=True, verbose=2)
+tbCallBack = keras.callbacks.TensorBoard(log_dir='./deepnet', histogram_freq=0, write_graph=True, write_images=True)
+#print(merged_model.summary)
+merged_model.fit(x=[x_train_1, x_train_2,x_train_1, x_train_2,x_train_1, x_train_2
+                    ], y=y_train, batch_size=512, epochs=200,
+                 verbose=1, class_weight=class_weight,
+                 validation_data=[[x_test_1,x_test_2,x_test_1,x_test_2,x_test_1,x_test_2
+                                   ],y_test,weight_val], shuffle=True, callbacks=[checkpoint,tbCallBack,
+                                                                                  early_stopping])
+prediction = merged_model.predict([x_test_1,x_test_2,x_test_1,x_test_2,x_test_1,x_test_2])
+prediction = [1 if x >.5 else 0 for x in prediction]
+print('f1_score:',(metrics.f1_score(prediction,y_test)))
