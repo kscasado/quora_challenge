@@ -37,3 +37,4 @@ def run(host='0.0.0.0', port=7171):
     """
     app.add_url_rule('/predict', view_func=ModelLoader.as_view('predict'))
     print 'running server http://{0}'.format(host + ':' + str(port))
+    WSGIServer((host, port), app).serve_forever()
