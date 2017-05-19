@@ -1,0 +1,9 @@
+{
+  "name": "semantic_similarity",
+  "version": "1.0.0",
+  "description": "find semantic similarity",
+  "main": "index.js",
+  "repository": "https://github.com/kscasado/quora_challenge",
+  "author": "Kevin Casado",
+  "license": "MIT"
+}
