@@ -23,18 +23,6 @@ class ModelOperations(object):
         except:
             raise Exception('Failed to load model/weights')
 
-    def load_normalizer(self, sk_normalized):
-        """
-        This function loads the sklearn.preprocessing.StandardScaler object
-        which had been used to normalize the original dataset
-        """
-        try:
-            f = open(sk_normalized, 'rb')
-            scalar = pickle.load(f)
-            f.close()
-            return scalar
-        except:
-            raise Exception('Failed to load normalizer')
 
     def save_model(self, model, json_path, weights_path):
         """
@@ -56,9 +44,7 @@ class Predictor(object):
 
         modoperations = ModelOperations()
         self.model = modoperations.load_model(json_path, weights_path)
-        self.scalar_x = modoperations.load_normalizer(normalized_x)
-        self.scalar_y = modoperations.load_normalizer(normalized_y)
-
+        
     def compile_model(self, loss, optimizer, **kwargs):
         """
         Similar to Keras compile function
