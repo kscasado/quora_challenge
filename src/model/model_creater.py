@@ -44,7 +44,7 @@ class Predictor(object):
 
         modoperations = ModelOperations()
         self.model = modoperations.load_model(json_path, weights_path)
-        
+
     def compile_model(self, loss, optimizer, **kwargs):
         """
         Similar to Keras compile function
@@ -52,25 +52,9 @@ class Predictor(object):
         """
         self.model.compile(loss=loss, optimizer=optimizer, **kwargs)
 
-    def _normalize_input(self, X_input):
-        """
-        Normalizes the input object to be predicted according to the scalar
-        used during the training process
-        :param X_input:
-            Input data to transform( normalize)
-        """
+    def preprocess_data(self,input1,input2):
 
-        X_input = self.scalar_x.transform(X_input)
-        return X_input
-
-    def _denormalize_prediction(self, x_pred):
-        """
-        De-normalizes the x_pred to actual value as per dataset
-        :param x_pred
-        """
-        value = self.scalar_y.inverse_transform(x_pred)
-        return value
-
+    
     def predict(self, X_input):
         """
         Make predictions, given some input data
