@@ -33,7 +33,6 @@ export default class Home extends React.Component {
     this.setState({question1:str})
   }
   _submitQuestions(event) {
-    //dosomething
-    console.log('button pressed')
+
   }
 }

@@ -17,10 +17,9 @@ class ModelLoader(MethodView):
 
     def post(self):
         content = request.get_json()
-        X_input = content['X_input']
-        if not isinstance(X_input, np.ndarray):
-            X_in = np.reshape(np.array(X_input), newshape=(1, 2))
-        pred_val = predictor.predict(X_input=X_in)
+        x1 = content['input1']
+        x2 = content['input2']
+        pred_val = predictor.predict(x1,x2)
         pred_val = pred_val.tolist()
         return json.jsonify({'pred_val': pred_val})
 
